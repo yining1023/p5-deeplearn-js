@@ -31,6 +31,9 @@ npm install p5ML --save
 - [Imagenet Webcam](examples/imagenetCamera)
 - [KNN Image Classifier](examples/KNNImage)
 
+## Demos
+- [Simple Teachable Machine](demos/teachableMachine)
+
 ## API Reference
  
 - [LSTM](#lstm)
@@ -78,6 +81,7 @@ knn.predict(video, callback);
 knn.getClassExampleCount();
 knn.clearClass(classIndex);
 ```
+See this [webcam example](examples/KNNImage)
 
 ### Neural Network
 
