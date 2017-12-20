@@ -78,8 +78,6 @@ See this [simple example ](examples/imagenet) and this [webcam example](examples
 var knn = new p5ml.KNNImageClassifier(callback);
 knn.addImage(video, index);
 knn.predict(video, callback);
-knn.getClassExampleCount();
-knn.clearClass(classIndex);
 ```
 See this [webcam example](examples/KNNImage)
 
