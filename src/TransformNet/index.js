@@ -1,0 +1,135 @@
+/* eslint max-len: "off" */
+/*
+fast-style-transfer
+Based on deeplearn.js demo: https://github.com/PAIR-code/deeplearnjs/tree/0608feadbd897bca6ec7abf3340515fe5f2de1c2/demos/fast-style-transfer
+and https://github.com/reiinakano/fast-style-transfer-deeplearnjs by reiinakano
+*/
+// import { Array1D, Array3D, Array4D, CheckpointLoader, ENV, Model, NDArray, NDArrayMath, Scalar } from 'deeplearn';
+import { Array3D, CheckpointLoader, ENV, Scalar } from 'deeplearn';
+
+class TransformNet {
+  constructor(style, model) {
+    this.ready = false;
+    this.math = ENV.math;
+    this.variableDictionary = {};
+    this.timesScalar = Scalar.new(150);
+    this.plusScalar = Scalar.new(255.0 / 2);
+    this.epsilonScalar = Scalar.new(1e-3);
+    this.style = style;
+    this.loadCheckpoints(model);
+  }
+
+  /**
+   * Loads necessary variables for SqueezeNet. Resolves the promise when the
+   * variables have all been loaded.
+   */
+  loadCheckpoints(path) {
+    if (this.variableDictionary[this.style] == null) {
+      const checkpointLoader =
+        new CheckpointLoader(path);
+      checkpointLoader.getAllVariables().then(async (vars) => {
+        this.variableDictionary[this.style] = vars;
+        this.variables = this.variableDictionary[this.style];
+        this.ready = true;
+      });
+    }
+  }
+
+  setStyle(style) {
+    this.style = style;
+  }
+
+  /**
+   * Infer through TransformNet, assumes variables have been loaded.
+   * Original Tensorflow version of model can be found at
+   * https://github.com/lengstrom/fast-style-transfer
+   *
+   * @param imgElement HTMLImageElement of input img
+   * @return Array3D containing pixels of output img
+   */
+  predict(imgElement) {
+    console.log('imgElement in predict: ', imgElement);
+    const preprocessedInput = Array3D.fromPixels(imgElement);
+    console.log('preprocessedInput: ', preprocessedInput);
+    const img = this.math.scope(() => {
+      const conv1 = this.convLayer(preprocessedInput, 1, true, 0);
+      const conv2 = this.convLayer(conv1, 2, true, 3);
+      const conv3 = this.convLayer(conv2, 2, true, 6);
+      const resid1 = this.residualBlock(conv3, 9);
+      const resid2 = this.residualBlock(resid1, 15);
+      const resid3 = this.residualBlock(resid2, 21);
+      const resid4 = this.residualBlock(resid3, 27);
+      const resid5 = this.residualBlock(resid4, 33);
+      const convT1 = this.convTransposeLayer(resid5, 64, 2, 39);
+      const convT2 = this.convTransposeLayer(convT1, 32, 2, 42);
+      const convT3 = this.convLayer(convT2, 1, false, 45);
+      const outTanh = this.math.tanh(convT3);
+      const scaled = this.math.scalarTimesArray(this.timesScalar, outTanh);
+      const shifted = this.math.scalarPlusArray(this.plusScalar, scaled);
+      const clamped = this.math.clip(shifted, 0, 255);
+      const normalized = this.math.divide(clamped, Scalar.new(255.0));
+
+      return normalized;
+    });
+
+    return img;
+  }
+
+  convLayer(input, strides, relu, varId) {
+    const y = this.math.conv2d(input, this.variables[this.varName(varId)], null, [strides, strides], 'same');
+
+    const y2 = this.instanceNorm(y, varId + 1);
+
+    if (relu) {
+      return this.math.relu(y2);
+    }
+
+    return y2;
+  }
+
+  convTransposeLayer(input, numFilters, strides, varId) {
+    const [height, width] = input.shape;
+    const newRows = height * strides;
+    const newCols = width * strides;
+    const newShape = [newRows, newCols, numFilters];
+
+    const y = this.math.conv2dTranspose(input, this.variables[this.varName(varId)], newShape, [strides, strides], 'same');
+
+    const y2 = this.instanceNorm(y, varId + 1);
+
+    const y3 = this.math.relu(y2);
+
+    return y3;
+  }
+
+  residualBlock(input, varId) {
+    const conv1 = this.convLayer(input, 1, true, varId);
+    const conv2 = this.convLayer(conv1, 1, false, varId + 3);
+    return this.math.addStrict(conv2, input);
+  }
+
+  instanceNorm(input, varId) {
+    const [height, width, inDepth] = input.shape;
+    const moments = this.math.moments(input, [0, 1]);
+    const mu = moments.mean;
+    const sigmaSq = moments.variance;
+    const shift = this.variables[this.varName(varId)];
+    const scale = this.variables[this.varName(varId + 1)];
+    const epsilon = this.epsilonScalar;
+    const normalized = this.math.divide(this.math.sub(input.asType('float32'), mu), this.math.sqrt(this.math.add(sigmaSq, epsilon)));
+    const shifted = this.math.add(this.math.multiply(scale, normalized), shift);
+    return shifted.as3D(height, width, inDepth);
+  }
+
+  static varName(varId) {
+    let variableName;
+    if (varId === 0) {
+      variableName = 'Variable';
+    } else {
+      variableName = `Variable_${varId}`;
+    }
+    return variableName;
+  }
+}
+
+export default TransformNet;
