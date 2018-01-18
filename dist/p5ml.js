@@ -25790,7 +25790,9 @@ function _asyncToGenerator(fn) { return function () { var gen = fn.apply(this, a
 function _classCallCheck(instance, Constructor) { if (!(instance instanceof Constructor)) { throw new TypeError("Cannot call a class as a function"); } }
 
 var TransformNet = function () {
-  function TransformNet(style, model) {
+  function TransformNet(callback, style, model) {
+    var _this = this;
+
     _classCallCheck(this, TransformNet);
 
     this.ready = false;
@@ -25800,7 +25802,10 @@ var TransformNet = function () {
     this.plusScalar = _deeplearn.Scalar.new(255.0 / 2);
     this.epsilonScalar = _deeplearn.Scalar.new(1e-3);
     this.style = style;
-    this.loadCheckpoints(model);
+    this.loadCheckpoints(model).then(function () {
+      _this.ready = true;
+      callback();
+    });
   }
 
   /**
@@ -25811,35 +25816,41 @@ var TransformNet = function () {
 
   _createClass(TransformNet, [{
     key: 'loadCheckpoints',
-    value: function loadCheckpoints(path) {
-      var _this = this;
-
-      if (this.variableDictionary[this.style] == null) {
-        var checkpointLoader = new _deeplearn.CheckpointLoader(path);
-        checkpointLoader.getAllVariables().then(function () {
-          var _ref = _asyncToGenerator( /*#__PURE__*/regeneratorRuntime.mark(function _callee(vars) {
-            return regeneratorRuntime.wrap(function _callee$(_context) {
-              while (1) {
-                switch (_context.prev = _context.next) {
-                  case 0:
-                    _this.variableDictionary[_this.style] = vars;
-                    _this.variables = _this.variableDictionary[_this.style];
-                    _this.ready = true;
-
-                  case 3:
-                  case 'end':
-                    return _context.stop();
+    value: function () {
+      var _ref = _asyncToGenerator( /*#__PURE__*/regeneratorRuntime.mark(function _callee(path) {
+        var checkpointLoader;
+        return regeneratorRuntime.wrap(function _callee$(_context) {
+          while (1) {
+            switch (_context.prev = _context.next) {
+              case 0:
+                if (!(this.variableDictionary[this.style] == null)) {
+                  _context.next = 6;
+                  break;
                 }
-              }
-            }, _callee, _this);
-          }));
 
-          return function (_x) {
-            return _ref.apply(this, arguments);
-          };
-        }());
+                checkpointLoader = new _deeplearn.CheckpointLoader(path);
+                _context.next = 4;
+                return checkpointLoader.getAllVariables();
+
+              case 4:
+                this.variableDictionary[this.style] = _context.sent;
+
+                this.variables = this.variableDictionary[this.style];
+
+              case 6:
+              case 'end':
+                return _context.stop();
+            }
+          }
+        }, _callee, this);
+      }));
+
+      function loadCheckpoints(_x) {
+        return _ref.apply(this, arguments);
       }
-    }
+
+      return loadCheckpoints;
+    }()
   }, {
     key: 'setStyle',
     value: function setStyle(style) {
@@ -25860,21 +25871,86 @@ var TransformNet = function () {
     value: function predict(imgElement) {
       var _this2 = this;
 
-      console.log('imgElement in predict: ', imgElement);
+      var self = this;
+      function varName(varId) {
+        var variableName = void 0;
+        if (varId === 0) {
+          variableName = 'Variable';
+        } else {
+          variableName = 'Variable_' + varId;
+        }
+        return variableName;
+      }
+
+      function instanceNorm(input, varId) {
+        var _input$shape = _slicedToArray(input.shape, 3),
+            height = _input$shape[0],
+            width = _input$shape[1],
+            inDepth = _input$shape[2];
+
+        var moments = self.math.moments(input, [0, 1]);
+        var mu = moments.mean;
+        var sigmaSq = moments.variance;
+        var shift = self.variables[varName(varId)];
+        var scale = self.variables[varName(varId + 1)];
+        var epsilon = self.epsilonScalar;
+        var normalized = self.math.divide(self.math.sub(input.asType('float32'), mu), self.math.sqrt(self.math.add(sigmaSq, epsilon)));
+        var shifted = self.math.add(self.math.multiply(scale, normalized), shift);
+        console.log('end of instanceNorm: ', instanceNorm);
+        return shifted.as3D(height, width, inDepth);
+      }
+
+      function convLayer(input, strides, relu, varId) {
+        var y = self.math.conv2d(input, self.variables[varName(varId)], null, [strides, strides], 'same');
+        var y2 = instanceNorm(y, varId + 1);
+
+        if (relu) {
+          console.log('self.math: ', self.math);
+          return self.math.relu(y2);
+        }
+
+        return y2;
+      }
+
+      function convTransposeLayer(input, numFilters, strides, varId) {
+        var _input$shape2 = _slicedToArray(input.shape, 2),
+            height = _input$shape2[0],
+            width = _input$shape2[1];
+
+        var newRows = height * strides;
+        var newCols = width * strides;
+        var newShape = [newRows, newCols, numFilters];
+
+        var y = self.math.conv2dTranspose(input, self.variables[varName(varId)], newShape, [strides, strides], 'same');
+        var y2 = instanceNorm(y, varId + 1);
+        var y3 = self.math.relu(y2);
+
+        return y3;
+      }
+
+      function residualBlock(input, varId) {
+        var conv1 = convLayer(input, 1, true, varId);
+        var conv2 = convLayer(conv1, 1, false, varId + 3);
+        console.log('end of residualBlock');
+        console.log('self.math.addStrict(conv2, input): ', self.math.addStrict(conv2, input));
+        return self.math.addStrict(conv2, input);
+      }
+
       var preprocessedInput = _deeplearn.Array3D.fromPixels(imgElement);
       console.log('preprocessedInput: ', preprocessedInput);
       var img = this.math.scope(function () {
-        var conv1 = _this2.convLayer(preprocessedInput, 1, true, 0);
-        var conv2 = _this2.convLayer(conv1, 2, true, 3);
-        var conv3 = _this2.convLayer(conv2, 2, true, 6);
-        var resid1 = _this2.residualBlock(conv3, 9);
-        var resid2 = _this2.residualBlock(resid1, 15);
-        var resid3 = _this2.residualBlock(resid2, 21);
-        var resid4 = _this2.residualBlock(resid3, 27);
-        var resid5 = _this2.residualBlock(resid4, 33);
-        var convT1 = _this2.convTransposeLayer(resid5, 64, 2, 39);
-        var convT2 = _this2.convTransposeLayer(convT1, 32, 2, 42);
-        var convT3 = _this2.convLayer(convT2, 1, false, 45);
+        var conv1 = convLayer(preprocessedInput, 1, true, 0);
+        var conv2 = convLayer(conv1, 2, true, 3);
+        var conv3 = convLayer(conv2, 2, true, 6);
+        var resid1 = residualBlock(conv3, 9);
+        var resid2 = residualBlock(resid1, 15);
+        var resid3 = residualBlock(resid2, 21);
+        var resid4 = residualBlock(resid3, 27);
+        var resid5 = residualBlock(resid4, 33);
+        console.log('HERE HERE');
+        var convT1 = convTransposeLayer(resid5, 64, 2, 39);
+        var convT2 = convTransposeLayer(convT1, 32, 2, 42);
+        var convT3 = convLayer(convT2, 1, false, 45);
         var outTanh = _this2.math.tanh(convT3);
         var scaled = _this2.math.scalarTimesArray(_this2.timesScalar, outTanh);
         var shifted = _this2.math.scalarPlusArray(_this2.plusScalar, scaled);
@@ -25885,74 +25961,6 @@ var TransformNet = function () {
       });
 
       return img;
-    }
-  }, {
-    key: 'convLayer',
-    value: function convLayer(input, strides, relu, varId) {
-      var y = this.math.conv2d(input, this.variables[this.varName(varId)], null, [strides, strides], 'same');
-
-      var y2 = this.instanceNorm(y, varId + 1);
-
-      if (relu) {
-        return this.math.relu(y2);
-      }
-
-      return y2;
-    }
-  }, {
-    key: 'convTransposeLayer',
-    value: function convTransposeLayer(input, numFilters, strides, varId) {
-      var _input$shape = _slicedToArray(input.shape, 2),
-          height = _input$shape[0],
-          width = _input$shape[1];
-
-      var newRows = height * strides;
-      var newCols = width * strides;
-      var newShape = [newRows, newCols, numFilters];
-
-      var y = this.math.conv2dTranspose(input, this.variables[this.varName(varId)], newShape, [strides, strides], 'same');
-
-      var y2 = this.instanceNorm(y, varId + 1);
-
-      var y3 = this.math.relu(y2);
-
-      return y3;
-    }
-  }, {
-    key: 'residualBlock',
-    value: function residualBlock(input, varId) {
-      var conv1 = this.convLayer(input, 1, true, varId);
-      var conv2 = this.convLayer(conv1, 1, false, varId + 3);
-      return this.math.addStrict(conv2, input);
-    }
-  }, {
-    key: 'instanceNorm',
-    value: function instanceNorm(input, varId) {
-      var _input$shape2 = _slicedToArray(input.shape, 3),
-          height = _input$shape2[0],
-          width = _input$shape2[1],
-          inDepth = _input$shape2[2];
-
-      var moments = this.math.moments(input, [0, 1]);
-      var mu = moments.mean;
-      var sigmaSq = moments.variance;
-      var shift = this.variables[this.varName(varId)];
-      var scale = this.variables[this.varName(varId + 1)];
-      var epsilon = this.epsilonScalar;
-      var normalized = this.math.divide(this.math.sub(input.asType('float32'), mu), this.math.sqrt(this.math.add(sigmaSq, epsilon)));
-      var shifted = this.math.add(this.math.multiply(scale, normalized), shift);
-      return shifted.as3D(height, width, inDepth);
-    }
-  }], [{
-    key: 'varName',
-    value: function varName(varId) {
-      var variableName = void 0;
-      if (varId === 0) {
-        variableName = 'Variable';
-      } else {
-        variableName = 'Variable_' + varId;
-      }
-      return variableName;
     }
   }]);
 
