@@ -25780,7 +25780,6 @@ fast-style-transfer
 Based on deeplearn.js demo: https://github.com/PAIR-code/deeplearnjs/tree/0608feadbd897bca6ec7abf3340515fe5f2de1c2/demos/fast-style-transfer
 and https://github.com/reiinakano/fast-style-transfer-deeplearnjs by reiinakano
 */
-// import { Array1D, Array3D, Array4D, CheckpointLoader, ENV, Model, NDArray, NDArrayMath, Scalar } from 'deeplearn';
 
 
 var _deeplearn = __webpack_require__(35);
@@ -25896,7 +25895,6 @@ var TransformNet = function () {
         var epsilon = self.epsilonScalar;
         var normalized = self.math.divide(self.math.sub(input.asType('float32'), mu), self.math.sqrt(self.math.add(sigmaSq, epsilon)));
         var shifted = self.math.add(self.math.multiply(scale, normalized), shift);
-        console.log('end of instanceNorm: ', instanceNorm);
         return shifted.as3D(height, width, inDepth);
       }
 
@@ -25905,7 +25903,6 @@ var TransformNet = function () {
         var y2 = instanceNorm(y, varId + 1);
 
         if (relu) {
-          console.log('self.math: ', self.math);
           return self.math.relu(y2);
         }
 
@@ -25931,13 +25928,10 @@ var TransformNet = function () {
       function residualBlock(input, varId) {
         var conv1 = convLayer(input, 1, true, varId);
         var conv2 = convLayer(conv1, 1, false, varId + 3);
-        console.log('end of residualBlock');
-        console.log('self.math.addStrict(conv2, input): ', self.math.addStrict(conv2, input));
         return self.math.addStrict(conv2, input);
       }
 
       var preprocessedInput = _deeplearn.Array3D.fromPixels(imgElement);
-      console.log('preprocessedInput: ', preprocessedInput);
       var img = this.math.scope(function () {
         var conv1 = convLayer(preprocessedInput, 1, true, 0);
         var conv2 = convLayer(conv1, 2, true, 3);
@@ -25947,7 +25941,6 @@ var TransformNet = function () {
         var resid3 = residualBlock(resid2, 21);
         var resid4 = residualBlock(resid3, 27);
         var resid5 = residualBlock(resid4, 33);
-        console.log('HERE HERE');
         var convT1 = convTransposeLayer(resid5, 64, 2, 39);
         var convT2 = convTransposeLayer(convT1, 32, 2, 42);
         var convT3 = convLayer(convT2, 1, false, 45);
@@ -25959,7 +25952,6 @@ var TransformNet = function () {
 
         return normalized;
       });
-
       return img;
     }
   }]);
