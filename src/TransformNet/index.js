@@ -4,7 +4,6 @@ fast-style-transfer
 Based on deeplearn.js demo: https://github.com/PAIR-code/deeplearnjs/tree/0608feadbd897bca6ec7abf3340515fe5f2de1c2/demos/fast-style-transfer
 and https://github.com/reiinakano/fast-style-transfer-deeplearnjs by reiinakano
 */
-// import { Array1D, Array3D, Array4D, CheckpointLoader, ENV, Model, NDArray, NDArrayMath, Scalar } from 'deeplearn';
 import { Array3D, CheckpointLoader, ENV, Scalar } from 'deeplearn';
 
 class TransformNet {
@@ -122,7 +121,6 @@ class TransformNet {
 
       return normalized;
     });
-
     return img;
   }
 }
